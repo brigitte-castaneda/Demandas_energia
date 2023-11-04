@@ -75,14 +75,30 @@ resultado_H_P <- merge(Servicios_del_hogar, resultado[,-c(2:4)], by = "key_DIR_E
 
 #crear quintiles segun ingreso
 quintiles <- quantile(resultado_H_P$I_HOGAR , probs = seq(0, 1, 0.2))
+quintiles <- quantile(resultado_H_P$I_HOGAR, probs = c(0, 0.2, 0.4, 0.6, 0.8, 1))
 
 resultado_H_P$quintil <- cut(resultado_H_P$I_HOGAR, breaks = quintiles, labels = c("Q1", "Q2", "Q3", "Q4", "Q5"))
-hist(resultado_H_P$CANT_PERSONAS_HOGAR)
+summary(resultado_H_P$I_HOGAR)
+glimpse(resultado_H_P)
+hist(resultado_H_P$I_HOGAR)
 
 # Cambiar la variable "mi_variable" a tipo character
 resultado_H_P$quintil <- as.character(resultado_H_P$quintil)
 
 #--------------------reviso NAS-----------------------------------
+# Count NA values in the entire dataframe
+na_count <- sum(is.na(resultado_H_P$quintil))
+
+# Count NA values in each column of the dataframe
+na_counts <- colSums(is.na(resultado_H_P))
+na_counts_data <- subset(resultado_H_P, is.na(resultado_H_P$quintil))
+
+na_counts_data <- subset(resultado_H_P, resultado_H_P$quintil=="Q1" )
+unique(na_counts_data$I_HOGAR)
+nrow(na_counts_data)
+
+# Asignar el valor "Q1" a las observaciones con ingresos iguales a cero
+resultado_H_P$quintil[resultado_H_P$I_HOGAR == 0] <- "Q1"
 
 
 #------------------graficas de analisis-----------------------------------------
@@ -94,7 +110,7 @@ library(ggplot2)
 
 # Plot ingreso
 resultado_H_P %>%
-  ggplot(aes(x=quintil, y=I_HOGAR, fill=quintil)) +
+  ggplot(aes(x=quintil, y=log(I_HOGAR), fill=quintil)) +
   geom_boxplot() +
   scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
   theme_ipsum() +
@@ -104,21 +120,6 @@ resultado_H_P %>%
   ) +
   ggtitle("Ingreso por quintiles") +
   xlab("")
-
-
-# Plot ingreso
-resultado_H_P %>%
-  ggplot(aes(x=quintil, y=I_HOGAR, fill=quintil)) +
-  geom_boxplot() +
-  scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
-  theme_ipsum() +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("Ingreso por quintiles") +
-  xlab("")
-
 
 # Plot CANTIDAD PERSONAS POR HOGAR
 resultado_H_P %>%
@@ -130,10 +131,11 @@ resultado_H_P %>%
     legend.position="none",
     plot.title = element_text(size=11)
   ) +
-  ggtitle("Ingreso por quintiles") +
+  ggtitle("CANTIDAD PERSONAS POR HOGAR") +
   xlab("")
 
 # Plot P6167
+#¿Cuántos minutos gasta para ir a la institución a la que asiste?
 resultado_H_P %>%
   ggplot(aes(x=quintil, y=P6167 , fill=quintil)) +
   geom_boxplot() +
@@ -143,5 +145,118 @@ resultado_H_P %>%
     legend.position="none",
     plot.title = element_text(size=11)
   ) +
-  ggtitle("Ingreso por quintiles") +
+  ggtitle("Educacion: minutos en transporte") +
   xlab("")
+
+# Plot P6886
+#¿cuánto tiempo se demora usted en su viaje de ida al trabajo? (incluya tiempo de espera del medio de transporte)
+resultado_H_P %>%
+  ggplot(aes(x=quintil, y=P6886 , fill=quintil)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE, alpha=0.6, option="A") +
+  theme_ipsum() +
+  theme(
+    legend.position="none",
+    plot.title = element_text(size=11)
+  ) +
+  ggtitle("Fuerza de trabajo: minutos en transporte") +
+  xlab("")
+
+
+# Tabla de resumen de variables por quintil
+tabla_promedios <- resultado_H_P %>%
+  group_by(quintil) %>%
+  summarise(CANT_PERSONAS_HOGAR = mean(CANT_PERSONAS_HOGAR),
+            I_HOGAR = mean(I_HOGAR),
+            PERCAPITA = mean(PERCAPITA),
+            transporte_priv = mean(P6615S1, na.rm = TRUE),
+            transporte_aux = mean(P8628S1, na.rm = TRUE),
+            tiempo_trabajo = mean(P6886, na.rm = TRUE), 
+            tiempo_estudio = mean(P6167, na.rm = TRUE))
+
+# Imprimir la tabla de promedios
+print(tabla_promedios)
+
+#-----------------------------------------
+# formato de variables
+glimpse(resultado_H_P)
+
+# Lista de nombres de variables a convertir en character
+variables_a_convertir <- c("CANT_PERSONAS_HOGAR", "P6615", "P8628",  "P8634", "P6885", "P4693")
+
+# Loop para cambiar las variables a tipo character
+for (variable in variables_a_convertir) {
+  resultado_H_P[[variable]] <- as.character(resultado_H_P[[variable]])
+}
+
+
+#Analisis de variables categoricas de interes
+
+# Calcular la frecuencia de las respuestas
+frecuencia_respuestas <- table(resultado_H_P$P6885)
+# Calcular la frecuencia de las respuestas por quintil, omitiendo los NA
+frecuencia_respuestas <- aggregate(P6885 ~ quintil, data = resultado_H_P, FUN = function(x) table(x, useNA = "always"))
+print(frecuencia_respuestas)
+
+#----------- convierto matriz en tabla frecuencia_respuestas
+# Crear un dataframe vacío
+frecuencia_respuestas_df <- data.frame()
+
+# Iterar a través de las filas de la tabla
+for (i in 1:nrow(frecuencia_respuestas)) {
+  fila <- frecuencia_respuestas[i, ]
+  quintil <- fila$quintil
+  matriz_fila <- as.matrix(fila$P6885)
+  
+  # Convertir la matriz en un dataframe y agregar una columna para el quintil
+  df_fila <- as.data.frame(matriz_fila)
+  df_fila$quintil <- quintil
+  
+  # Combinar el dataframe de la fila con el dataframe general
+  frecuencia_respuestas_df <- rbind(frecuencia_respuestas_df, df_fila)
+}
+
+# Imprimir el dataframe resultante
+print(frecuencia_respuestas_df_)
+
+#elimino col nas
+frecuencia_respuestas_df <- frecuencia_respuestas_df[,-c(14)]
+#convierto de wide a long
+frecuencia_respuestas_df <- pivot_longer(frecuencia_respuestas_df, cols = -quintil, names_to = "Tipo de transporte", values_to = "Frecuencia")
+#cambio nombres de vaiable de transporte
+frecuencia_respuestas_df_ <- frecuencia_respuestas_df %>%
+  mutate(`Tipo de transporte` = recode(`Tipo de transporte`,
+                             "1" = "Bus intermunicipal",
+                             "2" = "Bus urbano",
+                             "3" = "A pie",
+                             "4" = "Metro",
+                             "5" = "Transporte articulado",
+                             "6" = "Taxi",
+                             "7" = "Transporte de la empresa",
+                             "8" = "Automovil de uso particular",
+                             "9" = "Lancha, planchon, canoa",
+                             "10" = "Caballo",
+                             "11" = "Moto",
+                             "12" = "Bicicleta",
+                             "13" = "Otro"
+  ))
+
+
+# library
+library(ggplot2)
+
+glimpse(frecuencia_respuestas_df)
+
+# Grouped
+ggplot(frecuencia_respuestas_df_, aes(fill=`Tipo de transporte`, y=Frecuencia, x=quintil)) + 
+  geom_bar(position="dodge", stat="identity")
+
+# Stacked + percent
+porcentaje_tipo_transporte <- ggplot(frecuencia_respuestas_df_, aes(fill=`Tipo de transporte`, y=Frecuencia, x=quintil)) + 
+  geom_bar(position="fill", stat="identity")
+porcentaje_tipo_transporte
+
+# ---------------------------
+#agregar el tiempo a la tabla.
+
+#clasificar los medios de transporte segun los requiera
